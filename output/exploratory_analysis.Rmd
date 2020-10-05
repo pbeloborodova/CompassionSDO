@@ -105,3 +105,32 @@ knitr::kable(correlations_table,
 ```
 *Note.* All correlations were significant, *p* < .001.
 
+### SDO and Ethnic Group
+
+```{r sdo_ethnicity, echo = FALSE, warning = FALSE, message = FALSE}
+library(ggplot2)
+
+ggplot(sc, aes(x = ethnicity, y = sdo_mean, color = ethnicity)) +
+  geom_boxplot() +
+  xlab("Ethnicity") +
+  ylab ("Social Dominance Orientation") +
+  theme_light() +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45))
+
+```
+
+### SDO and Gender
+
+```{r sdo_gender, echo = FALSE, warning = FALSE, message = FALSE}
+library(ggplot2)
+
+ggplot(sc, aes(x = gender, y = sdo_mean, color = gender)) +
+  geom_boxplot() +
+  xlab("Gender") +
+  ylab ("Social Dominance Orientation") +
+  theme_light() +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45))
+
+```
