@@ -1,0 +1,107 @@
+---
+title: "Self-compassion & SDO Study"
+author: "Polina Beloborodova"
+date: "10/5/2020"
+output:
+  html_document:
+    theme: spacelab
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+load("~/R/CompassionSDO/data/clean/selfcomp_clean_means.Rda")
+sc <- self_comp_means
+```
+
+### Sample
+
+The data were collected from `r nrow(sc)` students of the University of Hawaiʻi at Mānoa in the Spring (*N* = `r sum(sc$semester == "Spring")`) and Fall (*N* = `r sum(sc$semester == "Fall")`) semesters of 2019. Mean age was `r round(mean(sc$age), 2)` years (*SD* = `r round(sd(sc$age), 2)`). Participants self-identified as female (`r round(100*sum(sc$gender == "Female")/nrow(sc), 2)`%), male (`r round(100*sum(sc$gender == "Male")/nrow(sc), 2)`%), and other gender (`r sum(sc$gender == "Other")` persons). Self-reported ethnicity was distributed as follows: Asian (`r round(100*sum(sc$ethnicity == "Asian")/nrow(sc), 2)`%), White (non-Hispanic, `r round(100*sum(sc$ethnicity == "White (non-Hispanic)")/nrow(sc), 2)`%), Multicultural (`r round(100*sum(sc$ethnicity == "Multicultural")/nrow(sc), 2)`%), Hawaiian/Pacific Islander (`r round(100*sum(sc$ethnicity == "Hawaiian/Pacific Islander")/nrow(sc), 2)`%), Hispanic (`r round(100*sum(sc$ethnicity == "Hispanic")/nrow(sc), 2)`%), Other (`r round(100*sum(sc$ethnicity == "Other")/nrow(sc), 2)`%), Black (non-Hispanic, `r round(100*sum(sc$ethnicity == "Black (non-Hispanic)")/nrow(sc), 2)`%), and Native American (`r sum(sc$ethnicity == "Native American")` persons).
+
+### Descriptive statistics
+
+```{r descriptives, echo = FALSE}
+library(knitr); library(psych)
+
+descriptives_table <- psych::describe(sc[,9:27])
+
+row.names(descriptives_table) <- c("Social Dominance Orientation",
+                           "FFMQ Total",
+                           "FFMQ Observe",
+                           "FFMQ Describe",
+                           "FFMQ Act with Awareness",
+                           "FFMQ Non-judge",
+                           "FFMQ Non-react",
+                           "SCS Total",
+                           "SCS Self-kindness",
+                           "SCS Self-judgment",
+                           "SCS Common Humanity",
+                           "SCS Isolation",
+                           "SCS Mindfulness",
+                           "SCS Over-identification",
+                           "IRI Total",
+                           "IRI Fantasy",
+                           "IRI Empathetic Concern",
+                           "IRI Perspective Taking",
+                           "IRI Personal Distress")
+
+descriptives_table <- data.frame(descriptives_table)
+
+knitr::kable(descriptives_table[,c("mean", "sd", "min", "max", "skew", "kurtosis")],
+             caption = "__Table 1.__ Descriptive Statistics of Study Varibles",
+             col.names = c("Mean", "SD", "Min", "Max", "Skewness", "Kurtosis"),
+             digits = 2)
+```
+
+### Bivariate Correlations (Total Scales)
+
+```{r paired_plots, echo = FALSE, warning = FALSE, message = FALSE}
+library(psych)
+
+pairs.panels(sc[,c("sdo_mean","ffmq_mean","scs_mean","iri_mean")], 
+             method = "pearson", # correlation method
+             hist.col = "#00AFBB",
+             density = TRUE,  # show density plots
+             ellipses = TRUE # show correlation ellipses
+             )
+```
+
+
+### Bivariate Correlations (Total Scales and Subscales)
+
+```{r correlations, echo = FALSE, warning = FALSE, message = FALSE}
+library(knitr); library(Hmisc)
+
+correlations_table <- data.frame(Hmisc::rcorr(as.matrix(sc[,9:27]))["r"])
+
+row.names(correlations_table) <- c("Social Dominance Orientation",
+                           "FFMQ Total",
+                           "FFMQ Observe",
+                           "FFMQ Describe",
+                           "FFMQ Act with Awareness",
+                           "FFMQ Non-judge",
+                           "FFMQ Non-react",
+                           "SCS Total",
+                           "SCS Self-kindness",
+                           "SCS Self-judgment",
+                           "SCS Common Humanity",
+                           "SCS Isolation",
+                           "SCS Mindfulness",
+                           "SCS Over-identification",
+                           "IRI Total",
+                           "IRI Fantasy",
+                           "IRI Empathetic Concern",
+                           "IRI Perspective Taking",
+                           "IRI Personal Distress")
+
+colnames(correlations_table) <- 1:19
+
+correlations_table$N <- 1:19
+
+correlations_table <- correlations_table[,c(20, 1:19)]
+
+knitr::kable(correlations_table,
+             caption = "__Table 2.__ Bivariate Correlations of Study Varibles",
+             digits = 2)
+```
+*Note.* All correlations were significant, *p* < .001.
+
