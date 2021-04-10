@@ -12,6 +12,7 @@ library(qgraph)
 library(bootnet)
 library(NetworkComparisonTest)
 library(networktools)
+library(stringr)
 
 
 # LOAD DATA ---------------------------------------------------------------------------
@@ -255,3 +256,76 @@ net_comparison <- NCT(self_comp_net[self_comp_clean_means$group == "PreCOVID",-9
                       centrality = c("strength", "expectedInfluence", "closeness", "betweenness"))
 
 max(net_comparison$nwinv.perm)
+
+
+# ITEM-LEVEL NETWORK ------------------------------------------------------------------
+
+
+load("data/clean/selfcomp_all.Rda")
+
+
+net_vars <- c(
+  sprintf("sdo%d", seq(1:16)),
+  sprintf("scs%d", seq(1:26)),
+  sprintf("iri%d", c(2,4,9,14,18,20,22,3,8,11,15,21,25,28)))
+
+self_comp_net <- self_comp[, net_vars]
+
+# Back-reverse-code
+
+# SDO
+
+sdo_items <- net_vars[grep("^sdo", net_vars)]
+
+sdo_keys <- c(-1,-1,-1,-1,-1,     # Items 1-5 (all R)
+              -1,-1,-1, 1, 1,     # Items 6-10 (6, 7, 8 R)
+               1, 1, 1, 1, 1, 1)  # Items 11-16 (none R)
+
+self_comp_net[,sdo_items] <- psych::reverse.code(sdo_keys,
+                                                 self_comp_net[,sdo_items],
+                                                 mini = 1, maxi = 7)
+
+# SCS
+
+scs_items <- net_vars[grep("^scs", net_vars)]
+
+scs_keys <- c(-1,-1, 1,-1, 1,     # Items 1-5 (1, 2, 4 R)
+              -1, 1,-1, 1, 1,     # Items 6-10 (6, 8 R)
+              -1, 1,-1, 1, 1,     # Items 11-15 (11, 13 R)
+              -1, 1,-1, 1,-1,     # Items 16-20 (16, 18, 20 R)
+              -1, 1, 1,-1,-1, 1)  # Items 21-26 (21, 24, 25 R)
+
+self_comp_net[,scs_items] <- psych::reverse.code(scs_keys,
+                                                 self_comp_net[,scs_items],
+                                                 mini = 1, maxi = 5)
+
+# IRI
+
+iri_items <- net_vars[grep("^iri", net_vars)]
+
+iri_keys <- c(1,-1, 1,-1,-1,      # Items 2,4,9,14,18 (4,14,18 R)
+              1, 1,-1, 1, 1,      # Items 20,22,3,8,11 (3 R)
+             -1, 1, 1, 1)         # Items 15,21,25,28 (15 R)
+
+keys <- c(sdo_keys, scs_keys, iri_keys)
+
+self_comp_net[,iri_items] <- psych::reverse.code(iri_keys,
+                                                 self_comp_net[,iri_items],
+                                                 mini = 1, maxi = 5)
+
+
+colnames(self_comp_net) <- toupper(colnames(self_comp_net))
+
+net_total <- estimateNetwork(self_comp_net,
+                             default = "EBICglasso", 
+                             weighted = TRUE,
+                             threshold = TRUE, 
+                             corMethod = "cor_auto")
+
+plot(net_total, details = TRUE)
+
+self_comp_net_groups <- stringr::str_remove(colnames(self_comp_net), "\\d{1,2}$")
+
+plot(net_total, details = TRUE,
+     groups = self_comp_net_groups,
+     palette = "colorblind")

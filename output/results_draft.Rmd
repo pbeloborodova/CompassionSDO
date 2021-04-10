@@ -1,0 +1,431 @@
+---
+title: "Results Draft"
+author: "Michael Juberg & Polina Beloborodova"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  bookdown::html_document2:
+    number_sections: false
+---
+
+```{r setup, include = FALSE}
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+
+library(knitr)
+library(ggplot2)
+library(tidyverse)
+library(rstatix)
+library(psych)
+library(corrr)
+library(qgraph)
+library(bootnet)
+library(NetworkComparisonTest)
+library(networktools)
+
+load("data/clean/selfcomp_clean_means.Rda")
+load("data/clean/selfcomp_demographic.Rda")
+load("data/clean/selfcomp_all.Rda")
+
+sc <- self_comp_demographic
+
+sc <-
+  sc %>%
+  mutate(group = ifelse(semester %in% c("Spring2019","Fall2019"), "PreCOVID",
+                        "PostCOVID"))
+
+sc_net <-
+  self_comp_clean_means %>%
+  select(sdo_mean_win,
+         iri_ec_pt_mean_win,
+         scs_selfkindness_mean,
+         scs_selfjudgment_mean,
+         scs_commonhuman_mean,
+         scs_isolation_mean,
+         scs_mindfulness_mean,
+         scs_overidentified_mean,
+         group)
+
+vars <- colnames(self_comp)
+
+sdo_items <- vars[grep("^sdo\\d{1,2}$", vars)]
+scs_items <- vars[grep("^scs\\d{1,2}$", vars)]
+iri_items <- vars[grep("^iri\\d{1,2}$", vars)]
+
+```
+
+#### Note to Michael
+
+- Comments in <span style="color: blue;">blue</span> are for me to not to forget to update parts of the paper.
+- Comments in <span style="color: red;">red</span> point out to potential sources of trouble. We will need to consider those issues before submitting the paper.
+
+## Method
+
+### Participants
+
+The data were collected from `r nrow(sc)` students of the University of Hawaiʻi at Mānoa. Participants' age ranged from `r min(sc$age)` to `r max(sc$age)` (*M* = `r round(mean(sc$age), 2)`, *SD* = `r round(sd(sc$age), 2)`). Participants self-identified as female (`r round(100*sum(sc$gender == "Female")/nrow(sc), 2)`%), male (`r round(100*sum(sc$gender == "Male")/nrow(sc), 2)`%), and other gender (`r sum(sc$gender == "Other")` persons). Self-reported ethnicity was distributed as follows: Asian (`r round(100*sum(sc$ethnicity == "Asian")/nrow(sc), 2)`%), White (non-Hispanic, `r round(100*sum(sc$ethnicity == "White (non-Hispanic)")/nrow(sc), 2)`%), Multicultural (`r round(100*sum(sc$ethnicity == "Multicultural")/nrow(sc), 2)`%), Hawaiian/Pacific Islander (`r round(100*sum(sc$ethnicity == "Hawaiian/Pacific Islander")/nrow(sc), 2)`%), Hispanic (`r round(100*sum(sc$ethnicity == "Hispanic")/nrow(sc), 2)`%), Other (`r round(100*sum(sc$ethnicity == "Other")/nrow(sc), 2)`%), Black (non-Hispanic, `r round(100*sum(sc$ethnicity == "Black (non-Hispanic)")/nrow(sc), 2)`%), and Native American (`r sum(sc$ethnicity == "Native American")` persons).
+
+### Procedure
+
+The participants were recruited via SONA system technology, a web-based software through which students can participate in online studies and earn extra course credit. Only 18 or more years old undergraduate students could participate. After completing the consent form, they proceeded to the questionnaire. The participants could not skip questions. They could stop their participation and erase their data at any moment before submitting their answers. After completing the survey, the participants could retrieve their extra credit for a class through SONA system. The data were collected in two waves: before the COVID-19 pandemic (Spring and Fall semesters, 2019, *N* = `r sum(sc$semester == "Spring2019") + sum(sc$semester == "Fall2019")`) and during it (Fall semester, 2020, *N* = `r sum(sc$semester == "Fall2020")`).
+
+```{r demographics-prepost}
+
+wilcox_age <- wilcox.test(age ~ group, data = sc)
+zstat_age <- qnorm(wilcox_age$p.value/2)
+d_age <- zstat_age/sqrt(nrow(sc))
+
+chisq_gender <- 
+  sc %>%
+  filter(gender != "Other") %>%
+  select(group, gender) %>%
+  count(group, gender) %>%
+  pivot_wider(names_from = gender, values_from = n) %>%
+  select(-1) %>%
+  chisq_test()
+
+fisher_ethnic <- 
+  sc %>%
+  select(group, ethnicity) %>%
+  count(group, ethnicity) %>%
+  pivot_wider(names_from = ethnicity, values_from = n) %>%
+  select(-1) %>%
+  fisher_test(workspace = 2000000)
+
+```
+
+Pre- and post-COVID groups significantly differed by age, according to the Wilcoxon Signed-Rank Test, *p* = `r round(wilcox_age$p.value, 3)`, Cohen’s *d* = `r round(d_age, 2)` (*M* = `r round(mean(subset(sc, group == "PreCOVID")$age), 2)` vs. *M* = `r round(mean(subset(sc, group == "PostCOVID")$age), 2)` in the pre- and post-COVID groups respectively). However, the difference was less than one standard deviation in the total sample. There were no significant differences in the gender ratio, according to the Chi-squared Test  (chi-square = `r round(chisq_gender$statistic, 2)`, *df* = `r chisq_gender$df`, *p* = `r round(chisq_gender$p, 3)`; participants who identified as 'other gender' were excluded from comparison due to the small group size). Proportions of ethnicities were not significantly different either according to the Fisher’s exact test (*p* = `r round(fisher_ethnic$p, 3)`).
+
+### Measures
+
+#### Self-Compassion ####
+
+Self-compassion was assessed using the Self-Compassion Scale (SCS; Neff, 2003a). The SCS is a 26-item self-report measure and consists of six subscales that measure three components of self-compassion (Neff, 2003a; 2003b). These components consist of opposing pairs: self-kindness (e.g., “I’m kind to myself when I’m experiencing suffering”) vs. self-judgment (e.g., “I’m disapproving and judgmental about my own flaws and inadequacies”); common humanity (e.g., “I try to see my failings as part of the human condition”) vs. isolation (e.g., “When I fail at something that's important to me, I tend to feel alone in my failure”); and mindfulness (e.g., “When I'm feeling down I try to approach my feelings with curiosity and openness”) vs. overidentifying (e.g., “When something upsets me I get carried away with my feelings”). Participants respond on a 5-point Likert scale ranging from 1 (*strongly disagree*) to 5 (*strongly agree*). Subscales scores are computed by calculating the mean of the subscale item responses. High scores reflect greater levels of the facets of self-compassion. The scale demonstrated good internal consistency in previous studies, with Cronbach’s alpha from .92 to .94 (Neff, 2003a; Neff, Kirkpatrick et al., 2007). The estimated internal consistency in current study was as follows: overall scale (`r round(psych::alpha(self_comp[,scs_items])$total$raw_alpha, 2)`), self-kindness subscale (`r round(psych::alpha(self_comp[,scs_items[c(5,12,19,23,26)]])$total$raw_alpha, 2)`), self-judgment subscale (`r round(psych::alpha(self_comp[,scs_items[c(1,8,11,16,21)]])$total$raw_alpha, 2)`), common humanity subscale (`r round(psych::alpha(self_comp[,scs_items[c(3,7,10,15)]])$total$raw_alpha, 2)`), isolation subscale (`r round(psych::alpha(self_comp[,scs_items[c(4,13,18,25)]])$total$raw_alpha, 2)`), mindfulness subscale (`r round(psych::alpha(self_comp[,scs_items[c(9,14,17,22)]])$total$raw_alpha, 2)`), overidentified subscale (`r round(psych::alpha(self_comp[,scs_items[c(2,6,20,24)]])$total$raw_alpha, 2)`).
+
+#### Empathy ####
+
+Empathy was assessed using the Interpersonal Reactivity Index (IRI; Davis, 1980). This multidimensional measure consists of four subscales: perspective-taking, empathic concern, personal distress, and fantasy. The full measure contains 28 items using a 5-point Likert scale with responses ranging from 0 (*does not describe me well*) to 4 (*describes me very well*). Sample items include “When I see someone being taken advantage of, I feel kind of protective towards them”; “When I see someone get hurt, I tend to remain calm”; and “Before criticizing somebody, I try to imagine how I would feel if I were in their place.” Items for subscales are summed. Higher subscales scores indicate greater facets of empathy. The IRI demonstrated adequate internal consistency in previous research with Cronbach’s alpha from .70 to .78 (Davis, 1980). In the present study, composite empathy scores were calculated by summing empathic concern and perspective taking subscales, with higher scores indicating increased levels of empathy (see Duriez, 2004; McFarland, 2010). The composite of empathic concern and perspective taking had a Cronbach’s alpha of `r round(psych::alpha(self_comp[,iri_items[c(2,4,9,14,18,20,22,3,8,11,15,21,25,28)]])$total$raw_alpha, 2)` in the current study.
+
+#### Social Dominance Orientation####
+
+Social Dominance Orientation (SDO-6) is a self-report measure that assesses one’s degree of preference for inequality among social groups (Pratto et al., 1994). The SDO measure asks questions such as “Which of the following objects or statements do you have a negative or positive feeling towards?” The 16-item scale is measured on a 7-point Likert scale which represents the degree of positive and negative feeling to each statement, ranging from 1 (*very negative*) to 7 (*very positive*). Sample items include: “Some groups of people are simply inferior to others;” “All groups should be given an equal chance in life;” and “No one group should dominate in society.” Items are summed for a total composite score. High scores indicate a higher preference for social inequality between groups and lower scores indicate a preference for egalitarian worldviews. SDO exhibited high levels of internal consistency in previous research, with Cronbach’s alpha of .91; (Pratto et al., 1994). In the present study, Cronbach’s alpha of SDO was `r round(psych::alpha(self_comp[,sdo_items])$total$raw_alpha, 2)`.
+
+### Statistical Analyses
+
+The data were analyzed using psychometric network analysis. This approach is extensively used in other fields, but it is a relatively new in psychology. Psychometric network analysis allows to create a visual representation of the complex associations among variables and find central variables which exert greater influence on the network. <span style="color: blue;">The present analysis included three stages. In the first stage, we examined the pattern of connections among study variables in the pre-COVID sample, including network topology, stability, and centrality indexes. Then we estimated the network in the post-COVID sample and conducted invariance analysis to find out if its structure was significantly different from the pre-COVID network structure. Finally, we estimated the network on the combined sample and run simulations to investigate how the network might respond to changes in individual variables.</span>
+
+In network analysis, variables are called ‘nodes’, and connections between them are called ‘edges.’ As per Constantini et al. (2015) recommendations for psychometric network analysis, we created weighted, undirected networks. In our analysis, nodes represented psychological constructs (social dominance orientation, empathy, and self-compassion subscales, calculated as the means of the items), and edge-weights represented their partial correlations. We calculated partial correlations rather than correlations to avoid spurious connections (e.g. nonzero, but very small or caused by shared connections with a third variable). Graphical Least Absolute Shrinkage and Selection Operator (gLASSO) with Extended Bayesian Information Criterion (EBIC) regularization procedure was used to identify the most parsimonious network (Epskamp & Fried, 2018).
+
+Stability of network centrality indexes was estimated with 5,000 case-dropping bootstraps that were used to calculate the Correlation Stability (CS) coefficient. This coefficient shows the largest proportion of the sample that can be dropped while maintaining a correlation of .70 between the original centrality indexes and those obtained from bootstrapped subsets (Epskamp et al., 2018).
+
+Invariance analysis included network structure, global strength, as well as strength of individual edges (refs). <span style="color: blue;">[details] [info on simulations]</span> The analyses were carried out using R [version] packages qgraph (Epskamp et al., 2012), bootnet (Epskamp et al., 2018), networktools (Jones, 2020), NetworkComparisonTest (NCT) (van Borkulo et al., 2017), <span style="color: blue;">and  [package for simulations]</span>
+
+### Data Pre-treatment
+
+We used the following procedures to ensure data quality. First, as per Greszki et al. (2015) recommendations, we removed the data of the participants who completed the survey twice faster than the median completion time (*N* = 44, 4.26% of the sample). Next, we checked for univariate and multivariate outliers. Two univariate outliers (z-scores outside of ±3.29 range, *p* < .001; Tabachnick & Fidell, 2013) were detected and Winsorized (replaced with a value corresponding to the z-score of 3.29). We also removed four multivariate outliers, resulting in the final sample of 986 participants (*N* = 550 in the pre-COVID sample and *N* = 436 in the post-COVID sample). Skewness and kurtosis of all variables were within ±1 range (see Table \@ref(tab:descriptives)).
+
+## Results
+
+### Preliminary Analyses
+
+#### Descriptive statistics
+
+As a preliminary step, we calculated descriptive statistics for all study variables (see Table \@ref(tab:descriptives)). There was substantial variability in the data: participants showed a wide range of scores, from smallest to largest on all scales.
+
+```{r descriptives}
+
+  sc_net %>%
+  select(-group) %>%
+  psych::describe() %>%
+  tibble() %>%
+  mutate(variable = c("Social Dominance Orientation",
+                      "IRI EC/PT Composite",
+                      "SCS Self-Kindness",
+                      "SCS Self-Judgment",
+                      "SCS Common Humanity",
+                      "SCS Isolation",
+                      "SCS Mindfulness",
+                      "SCS Over-Identification")) %>%
+  select(variable, mean, sd, min, max, skew, kurtosis) %>%
+  kable(caption = "Descriptive Statistics of Study Varibles",
+        col.names = c("Variable", "Mean", "SD", "Min", "Max", "Skewness", "Kurtosis"),
+        digits = 2)
+
+```
+
+Mean levels of study variables were not significantly different in the pre- and post-COVID groups, with an exception of the Over-identification sub-subscale of the Self-compassion scale (see Table \@ref(tab:psych-prepost)). Participants in the post-COVID group showed greater over-identification than those in the pre-COVID group (*M* = `r round(mean(subset(sc_net, group == "PreCOVID")$scs_overidentified_mean), 2)` vs. *M* = `r round(mean(subset(sc_net, group == "PostCOVID")$scs_overidentified_mean), 2)`).
+
+``` {r psych-prepost}
+
+self_comp_clean_means %>%
+  select(group, sdo_mean_win, iri_ec_pt_mean_win, starts_with("scs"), -scs_mean) %>%
+  pivot_longer(-group, names_to = "variables", values_to = "value") %>%
+  group_by(variables) %>%
+  t_test(value ~ group) %>%
+  adjust_pvalue(method = "holm") %>%
+  add_significance() %>%
+  select("variables", "statistic", "df", "p.adj") %>%
+  mutate(variables = c("2. IRI EC/PT Composite",
+                        "5. SCS Common Humanity",
+                        "6. SCS Isolation",
+                        "7. SCS Mindfulness",
+                        "8. SCS Over-Identification",
+                        "4. SCS Self-Judgment",
+                        "3. SCS Self-Kindness",
+                        "1. Social Dominance Orientation")) %>%
+  arrange(variables) %>%
+  kable(caption = "Pre-post T-tests for Means of Study Variables",
+        col.names = c("Variable", "Statistic", "DF", "P-value (Holm-adjusted)"),
+        digits = 2)
+
+```
+
+#### Bivariate Correlations
+
+We calculated bivariate Pearson correlations coefficients for all study variables. Consistently with previous research, SDO was moderately negatively related to empathy (*p* < .001). Additionally, it showed a weak negative correlation with SCS Isolation subscale (*p* = .007). Empathy was weakly to moderately related to all "positive" SCS sub-scales: Self-Kindness, Common Humanity, and Mindfulness (*p*'s < .001). All SCS sub-scales showed significant correlations with each other (see Table \@ref(tab:cor-table)).
+
+```{r cor-table}
+
+sc_net %>%
+  select(-group) %>%
+  cor() %>%
+  formatC(2, format = "f") %>%
+  replace(upper.tri(.), " ") %>%
+  data.frame() %>%
+  rename_all(list(~ as.character(c(1:8)))) %>%
+  mutate(Variable = c("1. Social Dominance Orientation",
+                      "2. IRI EC/PT Composite",
+                      "3. SCS Self-Kindness",
+                      "4. SCS Self-Judgment",
+                      "5. SCS Common Humanity",
+                      "6. SCS Isolation",
+                      "7. SCS Mindfulness",
+                      "8. SCS Over-Identification")) %>%
+  relocate(Variable) %>%
+  kable(caption = "Bivariate Correlations between Study Varibles")
+
+```
+
+P-values (auxiliary, will not go into the paper)
+
+```{r sig-table}
+
+sc_net %>%
+  select(-group) %>%
+  cor_pmat %>%
+  select(-rowname) %>%
+  mutate_all(as.numeric) %>%
+  mutate_all(round, 3) %>%
+  rename_all(list(~ as.character(c(1:8)))) %>%
+  mutate(Variable = c("1. Social Dominance Orientation",
+                      "2. IRI EC/PT Composite",
+                      "3. SCS Self-Kindness",
+                      "4. SCS Self-Judgment",
+                      "5. SCS Common Humanity",
+                      "6. SCS Isolation",
+                      "7. SCS Mindfulness",
+                      "8. SCS Over-Identification")) %>%
+  relocate(Variable) %>%
+  kable(label = NA, digits = 3)
+
+```
+
+
+### Network Analysis
+
+#### Pre-COVID Sample
+
+To avoid artificially inflated centrality indexes, prior to estimating the network, we checked the study variables for redundancy by identifying the nodes that correlated to the same degree with other nodes (Payton, 2020). <span style="color: red;">The analysis showed that Over-identification and Isolation subscales of the Self-Compassion scale had only 16.7% of significantly different correlations with other variables, which is below the recommended threshold of 25%. [here we need to address why we decided to keep both Over-identification and Isolation even though the analysis shows that they are redundant - maybe refer to the Neff 2003 validation paper? As I recall, she talks about the differences between the subscales at length]</span>
+
+```{r redundancy-check-pre, include = TRUE}
+
+goldbricker(sc_net[sc_net$group == "PreCOVID",-9], p = 0.05, method = "hittner2003", threshold = 0.25, corMin = 0.5, progressbar = FALSE)
+
+```
+
+Next, we estimated the network. It contained eight nodes and 16 edges (out of possible `r 8*(8-1)/2`), 12 of them positive and four negative. A description of the node labels can be seen in Table \@ref(tab:node-labels).
+
+```{r node-labels}
+
+node_labels <-
+  data.frame(
+    cbind(
+      c("SDO",
+        "IRI-EC/PT",
+        "SCS-SK",
+        "SCS-SJ",
+        "SCS-CH",
+        "SCS-I",
+        "SCS-M",
+        "SCS-OI"),
+      c("Social Dominance Orientation",
+        "Interpersonal Reactivity Index, Empathic Concern-Perspective Taking subscales composite",
+        "Self-Compassion Scale, Self-Kindness subscale",
+        "Self-Compassion Scale, Self-Judgment subscale",
+        "Self-Compassion Scale, Common Humanity subscale",
+        "Self-Compassion Scale, Isolation subscale",
+        "Self-Compassion Scale, Mimdfulness subscale",
+        "Self-Compassion Scale, Over-Identification subscale")
+      )
+    )
+
+colnames(node_labels) <- c("Label", "Description")
+
+kable(node_labels,
+      caption = "Node labels and corresponding study variables")
+
+```
+
+As shown in Figure \@ref(fig:net-pre), SDO had an edge only with empathy, which in turn had edges (all of them positive) with three nodes of a tightly interconnected self-compassion network: mindfulness, common humanity and over-identification. Thus, empathy served as a bridge between SDO and self-compassion which showed no direct connection.
+
+```{r net-pre, fig.cap = "Pre-COVID sample network"}
+
+colnames(sc_net) <- c("SDO",
+                      "IRI-EC/PT",
+                      "SCS-SK",
+                      "SCS-SJ",
+                      "SCS-CH",
+                      "SCS-I",
+                      "SCS-M",
+                      "SCS-OI",
+                      "group")
+
+net_pre <- estimateNetwork(sc_net[sc_net$group == "PreCOVID",-9],
+                             default = "EBICglasso", 
+                             weighted = TRUE,
+                             threshold = TRUE, 
+                             corMethod = "cor_auto")
+
+plot(net_pre, details = TRUE)
+
+```
+
+To evaluate the accuracy of the edge-weights, we calculated their 95% bootstrapped CIs based on 5,000 resamples, generated with non-parametric bootstrapping (see Figure \@ref(fig:boot-edge-pre) and Table \@ref(tab:boot-edge-pre)). Although the edge between empathy and mindfulness appeared stronger that empathy-over-identification and empathy-common humanity edges, their confidence intervals overlapped substantially, indicating that comparison of those edge-weights should be avoided.
+
+```{r boot-edge-pre, fig.cap = "Bootstrapped confidence intervals of estimated edge-weights of the pre-COVID network. The red line indicates the sample values and the gray area the bootstrapped CIs. The black line indicates the mean of the bootstrapped sample values. Each horizontal line represents one edge of the network, ordered from the edge with the highest edge-weight to the edge with the lowest edge-weight"}
+
+load("data/clean/boot_edge_pre.Rda")
+
+plot(boot_edge_pre, order = "sample")
+
+summary(boot_edge_pre) %>%
+  filter(type == "edge") %>%
+  select(node1, node2, sample, CIlower, CIupper) %>%
+  kable(digits= 2,
+      caption = "Bootstrapped confidence intervals of estimated edge-weights of the pre-COVID network")
+
+```
+
+Then, we calculated network centrality indexes and estimated their stability with 5,000 case-dropping bootstrapped subsets that were used to calculate Correlation Stability (CS) coefficient (Epskamp et al., 2018). Stability of the edges (the magnitude and direction of partial correlations) was good, with CS coefficient of .75, the largest possible value. Stability estimates of centrality indexes are depicted in Figure \@ref(fig:boot-centrality-pre). Stability of expected influence (sum of non-absolute edge weights connected to a node), strength (sum of absolute edge weights connected to a node), and closeness (the inverse of the sum of the distance of the node to all other nodes) was also good, with CS coefficients of .75 for expected influence and strength and .60 for closeness. Stability of betweenness (the number of time when a node is on the shortest way between other nodes) was .20, which is below the recommended threshold of .25 (Epskamp et al., 2018), hence, we do not further discuss this measure.
+
+``` {r boot-centrality-pre, fig.cap = "Average correlations between centrality indexes of networks sampled with cases dropped and the original sample. Lines indicate the means and areas indicate the range from the 2.5th quantile to the 97.5th quantile"}
+
+load("data/clean/boot_centrality_pre.Rda")
+
+corStability(boot_centrality_pre)
+
+plot(boot_centrality_pre, statistics = c("strength","closeness",
+                                         "betweenness","expectedInfluence"))
+
+```
+
+Not surprisingly, SDO showed the lowest centrality indexes among all nodes (see Figure \@ref(fig:centrality-pre) and Table \@ref(tab:centrality-pre)) because it was directly connected only to empathy. Empathy demonstrated moderate centrality measures. Within the self-compassion part of the network, self-judgment had the strongest connections with other nodes, mindfulness was the most directly connected to other nodes, and common humanity had the highest potential positive influence in the network.
+
+``` {r centrality-pre, fig.cap = "Pre-COVID network centrality indexes"}
+
+centralityPlot(net_pre,
+               include = c("Strength", "Closeness",
+                           "ExpectedInfluence"))
+
+kable(centrality_auto(net_pre)$node.centrality[-1],
+      caption = "Centrality Estimates",
+      digits = 2)
+
+```
+
+#### Post-COVID Sample
+
+Next, we estimated the network of the same variables in an independent sample collected during the COVID-19 pandemic. Prior to network analysis, we conducted a redundancy check. <span style="color: red;">We need to look into this and comment on why we keep all variables in the network. Maybe we should remove redundancy checks altogether because we maintain that SCS subscales are conceptually different?</span>
+
+```{r redundancy-check-post, include = TRUE}
+
+goldbricker(sc_net[sc_net$group == "PostCOVID",-9], p = 0.05, method = "hittner2003", threshold = 0.25, corMin = 0.5, progressbar = FALSE)
+
+```
+
+As depicted in Figure \@ref(fig:net-post), like in the pre-COVID network, SDO had an edge only with empathy and did not have edges with any of the self-compassion nodes. Empathy was connected to the self-compassion part of the network through the mindfulness node. In contrast to pre-COVID network, self-compassion part of the post-COVID network was split into 'positive' (mindfulness, common humanity, self-kindness) and 'negative' (over-identification, isolation, self-judgment) parts connected via self-kindness-self-judgment edge. 
+
+```{r net-post, fig.cap = "Post-COVID sample network"}
+
+net_post <- estimateNetwork(sc_net[sc_net$group == "PostCOVID",-9],
+                             default = "EBICglasso",
+                             weighted = TRUE,
+                             threshold = TRUE,
+                             corMethod = "cor_auto")
+
+plot(net_post, details = TRUE)
+
+```
+
+Stability of the edge-weights and centrality indexes were evaluated in the same manner, as for the pre-COVID network. Stability of the edges was good with CS coefficient estimated at the highest possible level (0.75). CS coefficient of strength and expected influence was also high (0.75 for both indexes) and at the acceptable level for closeness (0.44). Stability of betweenness was below the recommended minimal level of 0.25 with CS coefficient of 0.21 and was not considered in further analyses.
+
+<span style="color: blue;">The following figure and table are here FYI. I don't think we should include them into the paper (they are pretty similar to pre-COVID network).</span>
+
+```{r boot-edge-post}
+
+load("data/clean/boot_edge_post.Rda")
+
+plot(boot_edge_post, order = "sample")
+
+summary(boot_edge_post) %>%
+  filter(type == "edge") %>%
+  select(node1, node2, sample, CIlower, CIupper) %>%
+  kable(digits= 2,
+      caption = "Bootstrapped confidence intervals of estimated edge-weights of the pre-COVID network")
+
+```
+
+Predictably, SDO demonstrated the lowest centrality indexes among all nodes, similarly to the pre-COVID network. Self-judgment had the highest strength, and mindfulness had the highest closeness in both networks. Unlike in the pre-COVID network where common humanity had the highest expected influence, in the post-COVID network mindfulness played this role.
+
+``` {r boot-centrality-post}
+
+load("data/clean/boot_centrality_post.Rda")
+
+corStability(boot_centrality_post)
+
+plot(boot_centrality_post, statistics = c("strength","closeness",
+                                         "betweenness","expectedInfluence"))
+
+```
+
+``` {r centrality-post, fig.cap = "Post-COVID network centrality indexes"}
+
+centralityPlot(net_post,
+               include = c("Strength", "Closeness",
+                           "ExpectedInfluence"))
+
+kable(centrality_auto(net_post)$node.centrality[-1],
+      caption = "Centrality Estimates",
+      digits = 2)
+
+```
+
+Overall, pre- and post-COVID networks had a similar structure. In both of them, SDO was directly connected only with empathy which served as a bridge to self-compassion part of the network. The networks appeared sufficiently stable to proceed with the invariance analysis.
+
+#### Pre/Post-COVID Network Comparison
+
+First, we calculated Spearman correlation of edge-weights in pre- and post-COVID networks. The coefficient was `r round(cor(c(net_pre$graph), c(net_post$graph), method = "spearman"), 2)`, indicating high similarity. Then, we used Network Comparison Test (van Borkulo et al., 2017) to compare all edge-weights in the networks. The results indicated that edge-weights in the two networks did not significantly differ (*M* = 0.13, *p* = .51). Global strength (the measure of network connectivity) in the two groups did not significantly differ either (*p* = .80) with values of 3.59 in the pre-COVID and 3.50 in the post-COVID networks. We also tested invariance of separate edge-weights. Among all edges, only self-kindness-mindfulness edge was significantly different (*p* = .01), with edge-weights of .37 and .47 in pre- and post-COVID networks respectively. Centrality indexes (strength and expected influence) of separate nodes did not significantly differ either (all *p*'s > .13). Together, those results point to considerable similarity between the two networks.
+
+```{r net-invariance}
+
+net_comparison <- NCT(sc_net[sc_net$group == "PreCOVID",-9],
+                      sc_net[sc_net$group == "PostCOVID",-9],
+                      it = 100, test.edges = TRUE, edges = "all",
+                      # p.adjust.methods = "bonferroni",
+                      test.centrality = TRUE,
+                      centrality = c("strength", "betweenness", "expectedInfluence"),
+                      progressbar = FALSE)
+
+net_comparison
+
+```
+
