@@ -19,6 +19,7 @@ library(psych)
 library(corrr)
 library(qgraph)
 library(bootnet)
+library(EstimateGroupNetwork)
 library(NetworkComparisonTest)
 library(networktools)
 
@@ -108,13 +109,13 @@ Social Dominance Orientation (SDO-6) is a self-report measure that assesses one�
 
 We used psychometric network analysis in this study. This approach is extensively used in other fields, but it is relatively new for psychology. It allows to create a visual representation of the complex associations among variables and find central variables which exert greater influence on the network. We conducted the analysis in three steps. First, we estimated the networks for the pre- and post-COVID samples and calculated their centrality indexes. Then, we estimated stability of the networks. After that, we compared the networks using several aspects. All analyses were carried out in R version 4.0.2 in R-Studio 1.3.1073.
 
-In network analysis, variables are called ‘nodes’, and connections between them are called ‘edges.’ In our analysis, we used the Gaussian Graphical Model (GGM) (Lauritzen, 1996), a network in which nodes represented psychological constructs (social dominance orientation, empathy, and self-compassion subscales, calculated as the means of the items), and edges represented their partial correlations. If two constructs are linked in the resulting graph, they are dependent after controlling for all other constructs. If there is no link, they are thought to be independent. To determine an optimal network, we used the Fused Graphical Lasso (FGL) (Costantini et al., 2017; Danaher et al., 2014), a method that applies regularization to avoid estimating spurious edges across multiple networks jointly. FGL applies a penalty on network density (the number and strength of edges) and another penalty on differences among corresponding edge weights in networks estimated on different samples. In sum, this method allows networks to share common structures while preserving the differences. Tuning parameters that regulate those penalty terms were selected via k-fold cross-validation using *EstimateGroupNetwork* R-package (Costantini & Epskamp, 2017). Networks were visualized with *qgraph* R-package (Epskamp et al., 2012).
+In network analysis, variables are called ‘nodes’, and connections between them are called ‘edges.’ In our analysis, we used the Gaussian Graphical Model (GGM) (Lauritzen, 1996), a network in which nodes represented psychological constructs (social dominance orientation, empathy, and self-compassion subscales, calculated as the means of the items), and edges represented their partial correlations. If two constructs are linked in the resulting graph, they are dependent after controlling for all other constructs. If there is no link, they are thought to be independent. To determine an optimal network, we used the Fused Graphical Lasso (FGL) (Costantini et al., 2017; Danaher et al., 2014), a method that applies regularization to avoid estimating spurious edges across multiple networks jointly. FGL applies a penalty on network density (the number and strength of edges) and another penalty on differences among corresponding edge weights in networks estimated on different samples. In sum, this method allows networks to share common structures while preserving the differences. Tuning parameters that regulate those penalty terms were selected via Extended Bayesian Information Criterion (EBIC) using *EstimateGroupNetwork* R-package (Costantini & Epskamp, 2017). Networks were visualized with *qgraph* R-package (Epskamp et al., 2012).
 
 We calculated the following centrality indexes for each node in the two jointly estimated networks using *qgraph* R-package (Epskamp et al., 2012): strength (sum of absolute edge weights connected to a node), closeness (the inverse of the sum of the distance of the node to all other nodes), betweenness (the number of time when a node is on the shortest way between other nodes), and expected influence (sum of non-absolute edge weights connected to a node).
 
 Stability of the networks was estimated via *bootnet* R-package (Epskamp et al., 2017). Stability estimation has not yet been implemented for jointly estimated networks, hence following the example of Fried et al. (2017), we evaluated stability of pre- and post-COVID networks estimated separately with a penalty only on network density. Since independently estimated networks employ samples separately, they are less powered and stable than jointly estimated networks. Hence, stability of independently estimated networks represents the lower bound of stability of jointly estimated networks. To evaluate stability of the edge-weights, we calculated their 95% confidence intervals with 5,000 nonparametric bootstraps. Stability of centrality metrics was assessed with 5,000 case-dropping bootstraps used to calculate the Correlation Stability (CS) coefficient that shows the largest proportion of the sample that can be dropped while maintaining a correlation of .70 between the original centrality indexes and those obtained from bootstrapped subsets. Values above 0.25 indicate moderate, above 0.5 strong stability (Epskamp et al., 2017).
 
-Finally, we compared pre- and post-COVID networks. First, to assess their similarity, we calculated a correlation coefficient for the edge-weigths in the two networks (Borsboom et al., 2017; Rhemtulla et al., 2016). Then, we conducted invariance analysis of network structures via *NetworkComparisonTest* R package (van Borkulo et al., 2017). The analysis included an omnibus test that showed whether all edges were exactly the same, followed by post-hoc tests to find specific edges that differed, with the Holm-Bonferroni correction for multiple testing. We also tested whether global strength (the sum of absolute edge-weights in each network), as well as strenght and expected influence of individual nodes differed between the two networks. As a final step, we visualized the cross-sample network with edge-weights averaged between pre- and post-COVID samples.
+Finally, we compared pre- and post-COVID networks. First, to assess their similarity, we calculated a correlation coefficient for the edge-weigths in the two networks (Borsboom et al., 2017; Rhemtulla et al., 2016). Then, we conducted Network Comparison Test (NCT), implemented in *NetworkComparisonTest* R package (van Borkulo et al., 2017). NCT is a permutation-based hypothesis test that assesses the difference between two networks using several invariance measures. Our analysis started an omnibus test that showed whether all edges were exactly the same. We also tested invariance of global strength (the sum of absolute edge-weights in each network), as well as the strength and expected influence of individual nodes. As a final step, we visualized the cross-sample network with edge-weights averaged between pre- and post-COVID samples.
 
 ### Data Pre-treatment
 
@@ -229,17 +230,47 @@ sc_net %>%
 
 ### Network Analysis
 
-#### Pre-COVID Sample
+#### Network Estimation
 
-To avoid artificially inflated centrality indexes, prior to estimating the network, we checked the study variables for redundancy by identifying the nodes that correlated to the same degree with other nodes (Payton, 2020). <span style="color: red;">The analysis showed that Over-identification and Isolation subscales of the Self-Compassion scale had only 16.7% of significantly different correlations with other variables, which is below the recommended threshold of 25%. [here we need to address why we decided to keep both Over-identification and Isolation even though the analysis shows that they are redundant - maybe refer to the Neff 2003 validation paper? As I recall, she talks about the differences between the subscales at length]</span>
+```{r estimate-networks}
 
-```{r redundancy-check-pre, include = TRUE}
+colnames(sc_net) <- c("SDO",
+                      "IRI-EC/PT",
+                      "SCS-SK",
+                      "SCS-SJ",
+                      "SCS-CH",
+                      "SCS-I",
+                      "SCS-M",
+                      "SCS-OI",
+                      "group")
 
-goldbricker(sc_net[sc_net$group == "PreCOVID",-9], p = 0.05, method = "hittner2003", threshold = 0.25, corMin = 0.5, progressbar = FALSE)
+net_pre <- estimateNetwork(sc_net[sc_net$group == "PreCOVID",-9],
+                             default = "EBICglasso", 
+                             weighted = TRUE,
+                             threshold = TRUE, 
+                             corMethod = "cor_auto")
+
+net_post <- estimateNetwork(sc_net[sc_net$group == "PostCOVID",-9],
+                             default = "EBICglasso",
+                             weighted = TRUE,
+                             threshold = TRUE,
+                             corMethod = "cor_auto")
+
+L <- averageLayout(net_pre, net_post)
+
+net_joint <- EstimateGroupNetwork(sc_net,
+                                  inputType = "dataframe",
+                                  groupID = "group",
+                                  method = "InformationCriterion",
+                                  criterion = "ebic",
+                                  strategy = "sequential",
+                                  covfun = cor_auto,
+                                  simplifyOutput = FALSE,
+                                  seed = 23)
 
 ```
 
-Next, we estimated the network. It contained eight nodes and 16 edges (out of possible `r 8*(8-1)/2`), 12 of them positive and four negative. A description of the node labels can be seen in Table \@ref(tab:node-labels).
+Jointly estimatуd pre- and post-COVID networks are demonstrated in Figure \@ref(fig:net-joint). A description of the node labels can be seen in Table \@ref(tab:node-labels). Pre-COVID network contained `r sum(net_joint$network[[1]][upper.tri(net_joint$network[[1]])] != 0)` edges (out of possible `r 8*(8-1)/2`), `r sum(net_joint$network[[1]][upper.tri(net_joint$network[[1]])] > 0)` of them positive and `r sum(net_joint$network[[1]][upper.tri(net_joint$network[[1]])] < 0)` negative. Post-COVID network also contained `r sum(net_joint$network[[2]][upper.tri(net_joint$network[[2]])] != 0)` edges, `r sum(net_joint$network[[2]][upper.tri(net_joint$network[[2]])] > 0)` of them positive and `r sum(net_joint$network[[2]][upper.tri(net_joint$network[[2]])] < 0)` negative. Network structures were very similar. In both of them, SDO had the strongest edge only with empathy, which in turn connected to several nodes in the self-compassion part of the network. Thus, empathy served as a bridge between SDO and self-compassion which showed only weak connections. Self-compassion was distinctly split into highly intercorrelated 'positive' (Self-Kindness, Mindfulness, Common Humanity) and 'negative' (Self-Judgment, Over-Identification, Isolation) parts connected via Self-Judgment-Self-Kindness edge and in the post-COVID network, Over-Identification-Mindfulness edge.
 
 ```{r node-labels}
 
@@ -272,159 +303,169 @@ kable(node_labels,
 
 ```
 
-As shown in Figure \@ref(fig:net-pre), SDO had an edge only with empathy, which in turn had edges (all of them positive) with three nodes of a tightly interconnected self-compassion network: mindfulness, common humanity and over-identification. Thus, empathy served as a bridge between SDO and self-compassion which showed no direct connection.
+```{r plot-networks, fig.cap = "Regularized partial correlation networks of pre- and post-COVID samples. Blue edges represent positive associations, red edges represent negative associations. Edge thickness and saturation indicate strength of association."}
 
-```{r net-pre, fig.cap = "Pre-COVID sample network"}
+par(mfrow = c(1,2))
 
-colnames(sc_net) <- c("SDO",
-                      "IRI-EC/PT",
-                      "SCS-SK",
-                      "SCS-SJ",
-                      "SCS-CH",
-                      "SCS-I",
-                      "SCS-M",
-                      "SCS-OI",
-                      "group")
+net_joint_pre <- qgraph(net_joint$network[[1]],
+                        layout = L,
+                        title = "Pre-COVID sample",
+                        theme="colorblind",
+                        border.width=2,
+                        vsize=10,
+                        border.color='#555555',
+                        label.color="#555555",
+                        color="#EEEEEE",
+                        labels = colnames(net_joint$network[[1]]))
 
-net_pre <- estimateNetwork(sc_net[sc_net$group == "PreCOVID",-9],
-                             default = "EBICglasso", 
-                             weighted = TRUE,
-                             threshold = TRUE, 
-                             corMethod = "cor_auto")
-
-plot(net_pre, details = TRUE)
+net_joint_post <- qgraph(net_joint$network[[2]],
+                        layout = L,
+                        title = "Post-COVID sample",
+                        theme = "colorblind",
+                        border.width = 2,
+                        vsize = 10,
+                        border.color = '#555555',
+                        label.color = "#555555",
+                        color = "#EEEEEE",
+                        labels = colnames(net_joint$network[[2]]))
 
 ```
 
-To evaluate the accuracy of the edge-weights, we calculated their 95% bootstrapped CIs based on 5,000 resamples, generated with non-parametric bootstrapping (see Figure \@ref(fig:boot-edge-pre) and Table \@ref(tab:boot-edge-pre)). Although the edge between empathy and mindfulness appeared stronger that empathy-over-identification and empathy-common humanity edges, their confidence intervals overlapped substantially, indicating that comparison of those edge-weights should be avoided.
+Centrality indexes in pre- and post-COVID networks followed the same patterns (see Figure \@ref(fig:centrality-joint)). Betweenness showed larger discrepancies, but those could be due to low stability of this index. Closeness was not sufficiently stable either (see details the next section), hence we do not discuss those two measures. SDO showed the lowest centrality indexes because it had a strong edge only with empathy and a low overall number of edges. Empathy demonstrated moderate centrality. Within the self-compassion part of the network, self-judgment had the strongest connections with other nodes, and mindfulness and common humanity had the highest potential positive influence in the network.
+
+``` {r centrality-joint, fig.cap = "Netowork centrality indexes"}
+
+cent_plot <- centralityPlot(list("pre-COVID" = net_joint$network[[1]],
+                                 "post-COVID" = net_joint$network[[2]]),
+               include = c("Strength", "Closeness", "ExpectedInfluence", "Betweenness"),
+               print = FALSE)
+
+cent_plot +
+  labs(color = "Sample") +
+  guides(color = guide_legend(reverse = TRUE))
+
+# kable(centrality_auto(net_pre)$node.centrality[-1],
+#       caption = "Centrality Estimates",
+#       digits = 2)
+
+```
+
+#### Network Stability
+
+To evaluate the accuracy of the edge-weights of the separately estimated pre- and post-COVID networks, we calculated their 95% bootstrapped confidence intervals (see Figures \@ref(fig:boot-edge-pre) and \@ref(fig:boot-edge-post)). In both networks, CIs of some of the edges overlapped substantially, indicating that comparison of those edge-weights should be avoided.
 
 ```{r boot-edge-pre, fig.cap = "Bootstrapped confidence intervals of estimated edge-weights of the pre-COVID network. The red line indicates the sample values and the gray area the bootstrapped CIs. The black line indicates the mean of the bootstrapped sample values. Each horizontal line represents one edge of the network, ordered from the edge with the highest edge-weight to the edge with the lowest edge-weight"}
+
+# boot_edge_pre <- bootnet(net_pre, nCores = 8, nBoots = 5000)
 
 load("data/clean/boot_edge_pre.Rda")
 
 plot(boot_edge_pre, order = "sample")
 
-summary(boot_edge_pre) %>%
-  filter(type == "edge") %>%
-  select(node1, node2, sample, CIlower, CIupper) %>%
-  kable(digits= 2,
-      caption = "Bootstrapped confidence intervals of estimated edge-weights of the pre-COVID network")
+# summary(boot_edge_pre) %>%
+#   filter(type == "edge") %>%
+#   select(node1, node2, sample, CIlower, CIupper) %>%
+#   kable(digits= 2,
+#       caption = "Bootstrapped confidence intervals of estimated edge-weights of the pre-COVID network")
 
 ```
 
-Then, we calculated network centrality indexes and estimated their stability with 5,000 case-dropping bootstrapped subsets that were used to calculate Correlation Stability (CS) coefficient (Epskamp et al., 2018). Stability of the edges (the magnitude and direction of partial correlations) was good, with CS coefficient of .75, the largest possible value. Stability estimates of centrality indexes are depicted in Figure \@ref(fig:boot-centrality-pre). Stability of expected influence (sum of non-absolute edge weights connected to a node), strength (sum of absolute edge weights connected to a node), and closeness (the inverse of the sum of the distance of the node to all other nodes) was also good, with CS coefficients of .75 for expected influence and strength and .60 for closeness. Stability of betweenness (the number of time when a node is on the shortest way between other nodes) was .20, which is below the recommended threshold of .25 (Epskamp et al., 2018), hence, we do not further discuss this measure.
+```{r boot-edge-post, fig.cap = "Bootstrapped confidence intervals of estimated edge-weights of the post-COVID network. The red line indicates the sample values and the gray area the bootstrapped CIs. The black line indicates the mean of the bootstrapped sample values. Each horizontal line represents one edge of the network, ordered from the edge with the highest edge-weight to the edge with the lowest edge-weight"}
 
-``` {r boot-centrality-pre, fig.cap = "Average correlations between centrality indexes of networks sampled with cases dropped and the original sample. Lines indicate the means and areas indicate the range from the 2.5th quantile to the 97.5th quantile"}
+# boot_edge_post <- bootnet(net_post, nCores = 8, nBoots = 5000)
+
+load("data/clean/boot_edge_post.Rda")
+
+plot(boot_edge_post, order = "sample")
+
+# summary(boot_edge_post) %>%
+#   filter(type == "edge") %>%
+#   select(node1, node2, sample, CIlower, CIupper) %>%
+#   kable(digits= 2,
+#       caption = "Bootstrapped confidence intervals of estimated edge-weights of the pre-COVID network")
+
+```
+
+Then, we evaluated stability of the centrality indexes of separately estimated networks (see Figures \@ref(fig:boot-centrality-pre) and \@ref(fig:boot-centrality-post)). Stability of strength and expected influence in both networks was good, with correlation stability (CS) coefficients of .75, the largest possible value. Stability of closeness in the pre-COVID network was acceptable, with CS coefficient of .60. However, in the post-COVID network CS coefficient of closeness was .44 which is below the recommended threshold of .50 (Epskamp et al., 2017). Stability of betweenness was poor, with CS coefficient of .21 in the both networks.
+
+``` {r boot-centrality-pre, fig.cap = "Average correlations between centrality indexes of pre-COVID sample networks sampled with cases dropped and the original sample. Lines indicate the means and areas indicate the range from the 2.5th quantile to the 97.5th quantile"}
+
+# boot_centrality_pre <- bootnet(net_pre, nCores = 8, nBoots = 5000,
+#                     type = "case",
+#                     statistics = c("edge", "strength", "expectedInfluence",
+#                                    "closeness", "betweenness"))
 
 load("data/clean/boot_centrality_pre.Rda")
 
-corStability(boot_centrality_pre)
+# corStability(boot_centrality_pre)
 
 plot(boot_centrality_pre, statistics = c("strength","closeness",
                                          "betweenness","expectedInfluence"))
 
 ```
 
-Not surprisingly, SDO showed the lowest centrality indexes among all nodes (see Figure \@ref(fig:centrality-pre) and Table \@ref(tab:centrality-pre)) because it was directly connected only to empathy. Empathy demonstrated moderate centrality measures. Within the self-compassion part of the network, self-judgment had the strongest connections with other nodes, mindfulness was the most directly connected to other nodes, and common humanity had the highest potential positive influence in the network.
+``` {r boot-centrality-post, fig.cap = "Average correlations between centrality indexes of post-COVID sample networks sampled with cases dropped and the original sample. Lines indicate the means and areas indicate the range from the 2.5th quantile to the 97.5th quantile"}
 
-``` {r centrality-pre, fig.cap = "Pre-COVID network centrality indexes"}
-
-centralityPlot(net_pre,
-               include = c("Strength", "Closeness",
-                           "ExpectedInfluence"))
-
-kable(centrality_auto(net_pre)$node.centrality[-1],
-      caption = "Centrality Estimates",
-      digits = 2)
-
-```
-
-#### Post-COVID Sample
-
-Next, we estimated the network of the same variables in an independent sample collected during the COVID-19 pandemic. Prior to network analysis, we conducted a redundancy check. <span style="color: red;">We need to look into this and comment on why we keep all variables in the network. Maybe we should remove redundancy checks altogether because we maintain that SCS subscales are conceptually different?</span>
-
-```{r redundancy-check-post, include = TRUE}
-
-goldbricker(sc_net[sc_net$group == "PostCOVID",-9], p = 0.05, method = "hittner2003", threshold = 0.25, corMin = 0.5, progressbar = FALSE)
-
-```
-
-As depicted in Figure \@ref(fig:net-post), like in the pre-COVID network, SDO had an edge only with empathy and did not have edges with any of the self-compassion nodes. Empathy was connected to the self-compassion part of the network through the mindfulness node. In contrast to pre-COVID network, self-compassion part of the post-COVID network was split into 'positive' (mindfulness, common humanity, self-kindness) and 'negative' (over-identification, isolation, self-judgment) parts connected via self-kindness-self-judgment edge. 
-
-```{r net-post, fig.cap = "Post-COVID sample network"}
-
-net_post <- estimateNetwork(sc_net[sc_net$group == "PostCOVID",-9],
-                             default = "EBICglasso",
-                             weighted = TRUE,
-                             threshold = TRUE,
-                             corMethod = "cor_auto")
-
-plot(net_post, details = TRUE)
-
-```
-
-Stability of the edge-weights and centrality indexes were evaluated in the same manner, as for the pre-COVID network. Stability of the edges was good with CS coefficient estimated at the highest possible level (0.75). CS coefficient of strength and expected influence was also high (0.75 for both indexes) and at the acceptable level for closeness (0.44). Stability of betweenness was below the recommended minimal level of 0.25 with CS coefficient of 0.21 and was not considered in further analyses.
-
-<span style="color: blue;">The following figure and table are here FYI. I don't think we should include them into the paper (they are pretty similar to pre-COVID network).</span>
-
-```{r boot-edge-post}
-
-load("data/clean/boot_edge_post.Rda")
-
-plot(boot_edge_post, order = "sample")
-
-summary(boot_edge_post) %>%
-  filter(type == "edge") %>%
-  select(node1, node2, sample, CIlower, CIupper) %>%
-  kable(digits= 2,
-      caption = "Bootstrapped confidence intervals of estimated edge-weights of the pre-COVID network")
-
-```
-
-Predictably, SDO demonstrated the lowest centrality indexes among all nodes, similarly to the pre-COVID network. Self-judgment had the highest strength, and mindfulness had the highest closeness in both networks. Unlike in the pre-COVID network where common humanity had the highest expected influence, in the post-COVID network mindfulness played this role.
-
-``` {r boot-centrality-post}
+# boot_centrality_post <- bootnet(net_post, nCores = 8, nBoots = 5000,
+#                     type = "case",
+#                     statistics = c("edge", "strength", "expectedInfluence",
+#                                    "closeness", "betweenness"))
 
 load("data/clean/boot_centrality_post.Rda")
 
-corStability(boot_centrality_post)
+# corStability(boot_centrality_post)
 
 plot(boot_centrality_post, statistics = c("strength","closeness",
                                          "betweenness","expectedInfluence"))
 
 ```
 
-``` {r centrality-post, fig.cap = "Post-COVID network centrality indexes"}
+#### Network Comparison
 
-centralityPlot(net_post,
-               include = c("Strength", "Closeness",
-                           "ExpectedInfluence"))
+First, we calculated Spearman correlation of edge-weights in pre- and post-COVID networks. The coefficient was `r round(cor(c(net_pre$graph), c(net_post$graph), method = "spearman"), 2)`, indicating high similarity. Then, we used Network Comparison Test (NCT, van Borkulo et al., 2017) to compare edge-weights in the two networks. The results of the omnibus test indicated that none of the corresponding edge-weights significantly differed (*p* = .43). Global strength (the sum of all absolute edge-weights) in the two groups did not significantly differ either (*p* = .83), meaning that network connectivity was similar. Strength and expected influence of separate nodes did not significantly differ either (all *p*'s > .12). Together, those results point to considerable similarity between the two networks. Finally, we computed a cross-sample network by averaging all edge-weights. Figure \@ref(fig:average-network) depicts the network, and Figure \@ref(fig:average-centrality) shows strength and expected influence of its nodes.
 
-kable(centrality_auto(net_post)$node.centrality[-1],
-      caption = "Centrality Estimates",
-      digits = 2)
+```{r net-invariance, include = FALSE}
 
-```
+# net_comparison <- NCT(sc_net[sc_net$group == "PreCOVID",-9],
+#                       sc_net[sc_net$group == "PostCOVID",-9],
+#                       it = 5000,
+#                       test.edges = TRUE,
+#                       edges = "all",
+#                       p.adjust.methods = "holm",
+#                       test.centrality = TRUE,
+#                       centrality = c("strength", "expectedInfluence"),
+#                       progressbar = FALSE)
 
-Overall, pre- and post-COVID networks had a similar structure. In both of them, SDO was directly connected only with empathy which served as a bridge to self-compassion part of the network. The networks appeared sufficiently stable to proceed with the invariance analysis.
-
-#### Pre/Post-COVID Network Comparison
-
-First, we calculated Spearman correlation of edge-weights in pre- and post-COVID networks. The coefficient was `r round(cor(c(net_pre$graph), c(net_post$graph), method = "spearman"), 2)`, indicating high similarity. Then, we used Network Comparison Test (van Borkulo et al., 2017) to compare all edge-weights in the networks. The results indicated that edge-weights in the two networks did not significantly differ (*M* = 0.13, *p* = .51). Global strength (the measure of network connectivity) in the two groups did not significantly differ either (*p* = .80) with values of 3.59 in the pre-COVID and 3.50 in the post-COVID networks. We also tested invariance of separate edge-weights. Among all edges, only self-kindness-mindfulness edge was significantly different (*p* = .01), with edge-weights of .37 and .47 in pre- and post-COVID networks respectively. Centrality indexes (strength and expected influence) of separate nodes did not significantly differ either (all *p*'s > .13). Together, those results point to considerable similarity between the two networks.
-
-```{r net-invariance}
-
-net_comparison <- NCT(sc_net[sc_net$group == "PreCOVID",-9],
-                      sc_net[sc_net$group == "PostCOVID",-9],
-                      it = 100, test.edges = TRUE, edges = "all",
-                      # p.adjust.methods = "bonferroni",
-                      test.centrality = TRUE,
-                      centrality = c("strength", "betweenness", "expectedInfluence"),
-                      progressbar = FALSE)
+load("data/clean/nct_results.Rda")
 
 net_comparison
 
 ```
+
+```{r average-network, fig.cap = "Cross-sample network (N = 986) showing the average of pre- and post-COVID networks. Blue edges represent positive associations, red edges represent negative associations. Edge thickness and saturation indicate strength of association."}
+
+net_average_wmat <- (getWmat(net_joint_pre) + getWmat(net_joint_post))/2
+
+net_average <- qgraph(net_average_wmat,
+                      layout = L,
+                      title = "",
+                      theme = "colorblind",
+                      border.width = 2,
+                      vsize = 10,
+                      border.color = "#555555",
+                      label.color = "#555555",
+                      color="#EEEEEE",
+                      labels = colnames(net_average_wmat))
+
+```
+
+```{r average-centrality, fig.cap = "Centrality indexes of the cross-sample network."}
+
+cent_plot_average <- centralityPlot(net_average_wmat,
+                                    include = c("Strength", "ExpectedInfluence"))
+
+```
+
 
 ## Discussion
 
