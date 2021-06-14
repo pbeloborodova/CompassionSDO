@@ -58,7 +58,7 @@ iri_items <- vars[grep("^iri\\d{1,2}$", vars)]
 
 ### Participants
 
-The data were collected from `r nrow(sc)` students of the University of Hawaiʻi at Mānoa. Participants' age ranged from `r min(sc$age)` to `r max(sc$age)` (*M* = `r round(mean(sc$age), 2)`, *SD* = `r round(sd(sc$age), 2)`). Participants self-identified as female (`r round(100*sum(sc$gender == "Female")/nrow(sc), 2)`%), male (`r round(100*sum(sc$gender == "Male")/nrow(sc), 2)`%), and other gender (`r sum(sc$gender == "Other")` persons). Self-reported ethnicity was distributed as follows: Asian (`r round(100*sum(sc$ethnicity == "Asian")/nrow(sc), 2)`%), White (non-Hispanic, `r round(100*sum(sc$ethnicity == "White (non-Hispanic)")/nrow(sc), 2)`%), Multicultural (`r round(100*sum(sc$ethnicity == "Multicultural")/nrow(sc), 2)`%), Hawaiian/Pacific Islander (`r round(100*sum(sc$ethnicity == "Hawaiian/Pacific Islander")/nrow(sc), 2)`%), Hispanic (`r round(100*sum(sc$ethnicity == "Hispanic")/nrow(sc), 2)`%), Other (`r round(100*sum(sc$ethnicity == "Other")/nrow(sc), 2)`%), Black (non-Hispanic, `r round(100*sum(sc$ethnicity == "Black (non-Hispanic)")/nrow(sc), 2)`%), and Native American (`r sum(sc$ethnicity == "Native American")` persons).
+The data were collected from `r nrow(sc)` students of the University of Hawaiʻi at Mānoa. Participants' age ranged from `r min(sc$age)` to `r max(sc$age)` (*M* = `r round(mean(sc$age), 2)`, *SD* = `r round(sd(sc$age), 2)`). Participants self-identified as female (`r round(100*sum(sc$gender == "Female")/nrow(sc), 2)`%), male (`r round(100*sum(sc$gender == "Male")/nrow(sc), 2)`%), and other gender (`r sum(sc$gender == "Other")` persons). Self-reported ethnicity was distributed as follows: White (`r round(100*sum(sc$ethnicity_prescreen == "White (European American, Caucasian, Anglo, etc.)", na.rm = TRUE)/nrow(sc), 2)`%), East Asian (`r round(100*sum(sc$ethnicity_prescreen == "East Asian (Chinese, Korean, Japanese, etc.)", na.rm = TRUE)/nrow(sc), 2)`%), Bi- or multi-ethnic/racial (`r round(100*sum(sc$ethnicity_prescreen %in% c("Bi- or multi-ethnic (White/Black, White/East Asian, etc.)", "Bi- or multi-racial (White/Black, White/East Asian, etc.)"))/nrow(sc), 2)`%), Southeast Asian (`r round(100*sum(sc$ethnicity_prescreen == "Southeast Asian (Vietnamese, Cambodian, Filipino, etc.)", na.rm = TRUE)/nrow(sc), 2)`%), Latina/o (`r round(100*sum(sc$ethnicity_prescreen == "Latina/o (Hispanic American, Colombian, Mexican, etc.)", na.rm = TRUE)/nrow(sc), 2)`%), Native Hawaiian (`r round(100*sum(sc$ethnicity_prescreen == "Native Hawaiian", na.rm = TRUE)/nrow(sc), 2)`%), Other Polynesian or Pacific Islander (`r round(100*sum(sc$ethnicity_prescreen == "Other Polynesian or Pacific Islander (Micronesian, Melanesian, Samoan, etc.)", na.rm = TRUE)/nrow(sc), 2)`%), Black (`r round(100*sum(sc$ethnicity_prescreen == "Black (African American, African, Caribbean, etc.)", na.rm = TRUE)/nrow(sc), 2)`%), American Indian, Alaskan Native, or other Aboriginal (`r sum(sc$ethnicity_prescreen == "American Indian, Alaskan Native, or other Aboriginal (Cherokee, Navajo, Sioux, etc.)", na.rm = TRUE)` persons), South Asian (`r sum(sc$ethnicity_prescreen == "South Asian (Pakistani, Indian, Sri Lankan, etc.)", na.rm = TRUE)` persons), and other (`r sum(sc$ethnicity_prescreen == "Other not listed", na.rm = TRUE)` person); `r sum(is.na(sc$ethnicity_prescreen))` participants did not report their ethnicity.
 
 ### Procedure
 
@@ -81,15 +81,18 @@ chisq_gender <-
 
 fisher_ethnic <- 
   sc %>%
-  select(group, ethnicity) %>%
-  count(group, ethnicity) %>%
-  pivot_wider(names_from = ethnicity, values_from = n) %>%
+  select(group, ethnicity_prescreen) %>%
+  drop_na(ethnicity_prescreen) %>%
+  filter(!(ethnicity_prescreen %in% c("Other not listed", "South Asian (Pakistani, Indian, Sri Lankan, etc.)"))) %>%
+  mutate(ethnicity_prescreen = if_else(ethnicity_prescreen == "Bi- or multi-racial (White/Black, White/East Asian, etc.)", "Bi- or multi-ethnic (White/Black, White/East Asian, etc.)", ethnicity_prescreen)) %>%
+  count(group, ethnicity_prescreen) %>%
+  pivot_wider(names_from = ethnicity_prescreen, values_from = n) %>%
   select(-1) %>%
-  fisher_test(workspace = 2000000)
+  fisher_test(simulate.p.value = TRUE)
 
 ```
 
-Pre- and post-COVID groups were demographically equivalent. There were no significant differences in the gender ratio, according to the Chi-squared Test  (chi-square = `r round(chisq_gender$statistic, 2)`, *df* = `r chisq_gender$df`, *p* = `r round(chisq_gender$p, 3)`; participants who identified as 'other gender' were excluded from comparison due to the small group size). Proportions of ethnicities were not significantly different either according to the Fisher’s exact test (*p* = `r round(fisher_ethnic$p, 3)`). The groups significantly differed by age, according to the Wilcoxon Signed-Rank Test, *p* = `r round(wilcox_age$p.value, 3)`, Cohen’s *d* = `r round(d_age, 2)` (*M* = `r round(mean(subset(sc, group == "PreCOVID")$age), 2)` vs. *M* = `r round(mean(subset(sc, group == "PostCOVID")$age), 2)` in the pre- and post-COVID groups respectively). However, the difference was less than one standard deviation in the total sample. 
+Pre- and post-COVID groups were demographically equivalent. There were no significant differences in the gender ratio, according to the Chi-squared Test  (chi-square = `r round(chisq_gender$statistic, 2)`, *df* = `r chisq_gender$df`, *p* = `r round(chisq_gender$p, 3)`; participants who identified as 'other gender' were excluded from comparison due to the small group size). Proportions of ethnicities were not significantly different either according to the Fisher’s exact test with Monte Carlo simulation (*p* = `r round(fisher_ethnic$p, 3)`). The groups significantly differed by age, according to the Wilcoxon Signed-Rank Test, *p* = `r round(wilcox_age$p.value, 3)`, Cohen’s *d* = `r round(d_age, 2)` (*M* = `r round(mean(subset(sc, group == "PreCOVID")$age), 2)` vs. *M* = `r round(mean(subset(sc, group == "PostCOVID")$age), 2)` in the pre- and post-COVID groups respectively). However, the difference was less than one standard deviation in the total sample. 
 
 ### Measures
 
